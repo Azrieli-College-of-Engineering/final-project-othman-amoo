@@ -123,14 +123,15 @@ const CHALLENGE_KEYS = [
   'closeNotificationsChallenge',
   'csafChallenge',
   'exposedCredentialsChallenge',
-  'leakedApiKeyChallenge'
+  'leakedApiKeyChallenge',
+  'symlinkAttackChallenge'
 ] as const
 
 export type ChallengeKey = typeof CHALLENGE_KEYS[number]
 
 class Challenge extends Model<
-InferAttributes<Challenge>,
-InferCreationAttributes<Challenge>
+  InferAttributes<Challenge>,
+  InferCreationAttributes<Challenge>
 > {
   declare id: CreationOptional<number>
   declare name: string
