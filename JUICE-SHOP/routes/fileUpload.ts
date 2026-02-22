@@ -16,7 +16,7 @@ import * as challengeUtils from '../lib/challengeUtils'
 import { challenges } from '../data/datacache'
 import * as utils from '../lib/utils'
 
-function ensureFileIsPassed ({ file }: Request, res: Response, next: NextFunction) {
+function ensureFileIsPassed({ file }: Request, res: Response, next: NextFunction) {
   if (file != null) {
     next()
   } else {
@@ -24,47 +24,61 @@ function ensureFileIsPassed ({ file }: Request, res: Response, next: NextFunctio
   }
 }
 
-function handleZipFileUpload ({ file }: Request, res: Response, next: NextFunction) {
+function handleZipFileUpload({ file }: Request, res: Response, next: NextFunction) {
   if (utils.endsWith(file?.originalname.toLowerCase(), '.zip')) {
-    if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.fileWriteChallenge)) {
-      const buffer = file.buffer
-      const filename = file.originalname.toLowerCase()
-      const tempFile = path.join(os.tmpdir(), filename)
-      fs.open(tempFile, 'w', function (err, fd) {
-        if (err != null) { next(err) }
-        fs.write(fd, buffer, 0, buffer.length, null, function (err) {
-          if (err != null) { next(err) }
-          fs.close(fd, function () {
-            fs.createReadStream(tempFile)
-              .pipe(unzipper.Parse())
-              .on('entry', function (entry: any) {
-                const fileName = entry.path
-                const absolutePath = path.resolve('uploads/complaints/' + fileName)
-                challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
-                if (absolutePath.includes(path.resolve('.'))) {
-                  entry.pipe(fs.createWriteStream('uploads/complaints/' + fileName).on('error', function (err) { next(err) }))
-                } else {
-                  entry.autodrain()
+    if (((file?.buffer) != null) && (utils.isChallengeEnabled(challenges.fileWriteChallenge) || utils.isChallengeEnabled(challenges.symlinkAttackChallenge))) {
+      unzipper.Open.buffer(file.buffer).then(async (zip) => {
+        for (const entry of zip.files) {
+          const fileName = entry.path
+          const absolutePath = path.resolve('uploads/complaints/' + fileName)
+          challengeUtils.solveIf(challenges.fileWriteChallenge, () => { return absolutePath === path.resolve('ftp/legal.md') })
+          if (absolutePath.includes(path.resolve('.'))) {
+            const directory = path.dirname(absolutePath)
+            if (!fs.existsSync(directory)) {
+              fs.mkdirSync(directory, { recursive: true })
+            }
+            const extAttr = entry.externalFileAttributes ?? 0
+            const isSymlink = ((extAttr >> 16) & 0xf000) === 0xa000
+            if (isSymlink) {
+              const content = await entry.buffer()
+              const symlinkTarget = content.toString().trim()
+              try {
+                if (fs.existsSync(absolutePath) || fs.lstatSync(absolutePath).isSymbolicLink()) {
+                  fs.unlinkSync(absolutePath)
                 }
-              }).on('error', function (err: unknown) { next(err) })
-          })
-        })
+              } catch (e) { }
+              try {
+                fs.symlinkSync(symlinkTarget, absolutePath)
+              } catch (err) {
+                console.error(`[SymlinkAttack] Error creating symlink at ${absolutePath} pointing to ${symlinkTarget}:`, err)
+              }
+            } else {
+              const content = await entry.buffer()
+              fs.writeFileSync(absolutePath, content)
+            }
+          }
+        }
+        res.status(204).end()
+      }).catch((err: any) => {
+        console.error(err)
+        next(err)
       })
+    } else {
+      res.status(204).end()
     }
-    res.status(204).end()
   } else {
     next()
   }
 }
 
-function checkUploadSize ({ file }: Request, res: Response, next: NextFunction) {
+function checkUploadSize({ file }: Request, res: Response, next: NextFunction) {
   if (file != null) {
     challengeUtils.solveIf(challenges.uploadSizeChallenge, () => { return file?.size > 100000 })
   }
   next()
 }
 
-function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
+function checkFileType({ file }: Request, res: Response, next: NextFunction) {
   const fileType = file?.originalname.substr(file.originalname.lastIndexOf('.') + 1).toLowerCase()
   challengeUtils.solveIf(challenges.uploadTypeChallenge, () => {
     return !(fileType === 'pdf' || fileType === 'xml' || fileType === 'zip' || fileType === 'yml' || fileType === 'yaml')
@@ -72,7 +86,7 @@ function checkFileType ({ file }: Request, res: Response, next: NextFunction) {
   next()
 }
 
-function handleXmlUpload ({ file }: Request, res: Response, next: NextFunction) {
+function handleXmlUpload({ file }: Request, res: Response, next: NextFunction) {
   if (utils.endsWith(file?.originalname.toLowerCase(), '.xml')) {
     challengeUtils.solveIf(challenges.deprecatedInterfaceChallenge, () => { return true })
     if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.deprecatedInterfaceChallenge)) { // XXE attacks in Docker/Heroku containers regularly cause "segfault" crashes
@@ -105,7 +119,7 @@ function handleXmlUpload ({ file }: Request, res: Response, next: NextFunction) 
   next()
 }
 
-function handleYamlUpload ({ file }: Request, res: Response, next: NextFunction) {
+function handleYamlUpload({ file }: Request, res: Response, next: NextFunction) {
   if (utils.endsWith(file?.originalname.toLowerCase(), '.yml') || utils.endsWith(file?.originalname.toLowerCase(), '.yaml')) {
     challengeUtils.solveIf(challenges.deprecatedInterfaceChallenge, () => { return true })
     if (((file?.buffer) != null) && utils.isChallengeEnabled(challenges.deprecatedInterfaceChallenge)) {
