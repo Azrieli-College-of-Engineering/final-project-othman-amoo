@@ -282,6 +282,12 @@ restoreOverwrittenFilesWithOriginals().then(() => {
   app.use('/support/logs', verify.accessControlChallenges()) // vuln-code-snippet hide-line
   app.use('/support/logs/:file', serveLogFiles()) // vuln-code-snippet vuln-line accessLogDisclosureChallenge
 
+  /* /complaints directory browsing and file serving */
+  app.use('/complaints', serveIndexMiddleware, serveIndex('uploads/complaints', { icons: true }))
+  app.get('/complaints/:file', verify.symlinkChallenge(), (req: Request, res: Response) => {
+    res.sendFile(path.resolve('uploads/complaints', req.params.file))
+  })
+
   /* Swagger documentation for B2B v2 endpoints */
   app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument))
 
@@ -307,7 +313,7 @@ restoreOverwrittenFilesWithOriginals().then(() => {
   app.post('/rest/memories', uploadToDisk.single('image'), ensureFileIsPassed, security.appendUserId(), metrics.observeFileUploadMetricsMiddleware(), addMemory())
 
   app.use(bodyParser.text({ type: '*/*' }))
-  app.use(function jsonParser (req: Request, res: Response, next: NextFunction) {
+  app.use(function jsonParser(req: Request, res: Response, next: NextFunction) {
     // @ts-expect-error FIXME intentionally saving original request in this property
     req.rawBody = req.body
     if (req.headers['content-type']?.includes('application/json')) {
@@ -338,7 +344,7 @@ restoreOverwrittenFilesWithOriginals().then(() => {
   app.use('/rest/user/reset-password', rateLimit({
     windowMs: 5 * 60 * 1000,
     max: 100,
-    keyGenerator ({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } // vuln-code-snippet vuln-line resetPasswordMortyChallenge
+    keyGenerator({ headers, ip }: { headers: any, ip: any }) { return headers['X-Forwarded-For'] ?? ip } // vuln-code-snippet vuln-line resetPasswordMortyChallenge
   }))
   // vuln-code-snippet end resetPasswordMortyChallenge
 
@@ -713,7 +719,7 @@ const Metrics = metrics.observeMetrics() // vuln-code-snippet neutral-line expos
 app.get('/metrics', metrics.serveMetrics()) // vuln-code-snippet vuln-line exposedMetricsChallenge
 errorhandler.title = `${config.get<string>('application.name')} (Express ${utils.version('express')})`
 
-export async function start (readyCallback?: () => void) {
+export async function start(readyCallback?: () => void) {
   const datacreatorEnd = startupGauge.startTimer({ task: 'datacreator' })
   await sequelize.sync({ force: true })
   await datacreator()
@@ -739,7 +745,7 @@ export async function start (readyCallback?: () => void) {
   void collectDurationPromise('customizeEasterEgg', customizeEasterEgg)() // vuln-code-snippet hide-line
 }
 
-export function close (exitCode: number | undefined) {
+export function close(exitCode: number | undefined) {
   if (server) {
     clearInterval(metricsUpdateLoop)
     server.close()
