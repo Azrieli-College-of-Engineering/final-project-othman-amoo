@@ -8,6 +8,8 @@ import { Op } from 'sequelize'
 import jwt from 'jsonwebtoken'
 import config from 'config'
 import jws from 'jws'
+import fs from 'node:fs'
+import path from 'node:path'
 
 import { products, challenges, retrieveBlueprintChallengeFile } from '../data/datacache'
 import type { Product as ProductConfig } from '../lib/config.types'
@@ -72,6 +74,24 @@ export const accessControlChallenges = () => ({ url }: Request, res: Response, n
   challengeUtils.solveIf(challenges.accessLogDisclosureChallenge, () => { return url.match(/access\.log(0-9-)*/) })
   next()
 }
+export const symlinkChallenge = () => (req: Request, res: Response, next: NextFunction) => {
+  if (challengeUtils.notSolved(challenges.symlinkAttackChallenge)) {
+    const file = req.params.file
+    if (file) {
+      const filePath = path.resolve('uploads/complaints', file)
+      if (fs.existsSync(filePath)) {
+        const stats = fs.lstatSync(filePath)
+        if (stats.isSymbolicLink()) {
+          const target = fs.readlinkSync(filePath)
+          if (target.includes('users.yml')) {
+            challengeUtils.solve(challenges.symlinkAttackChallenge)
+          }
+        }
+      }
+    }
+  }
+  next()
+}
 
 export const errorHandlingChallenge = () => (err: unknown, req: Request, { statusCode }: Response, next: NextFunction) => {
   challengeUtils.solveIf(challenges.errorHandlingChallenge, () => { return err && (statusCode === 200 || statusCode > 401) })
@@ -105,7 +125,7 @@ export const serverSideChallenges = () => (req: Request, res: Response, next: Ne
   next()
 }
 
-function jwtChallenge (challenge: Challenge, req: Request, algorithm: string, email: string | RegExp) {
+function jwtChallenge(challenge: Challenge, req: Request, algorithm: string, email: string | RegExp) {
   const token = utils.jwtFrom(req)
   if (token) {
     const decoded = jws.decode(token) ? jwt.decode(token) : null
@@ -124,12 +144,12 @@ function jwtChallenge (challenge: Challenge, req: Request, algorithm: string, em
   }
 }
 
-function hasAlgorithm (token: string, algorithm: string) {
+function hasAlgorithm(token: string, algorithm: string) {
   const header = JSON.parse(Buffer.from(token.split('.')[0], 'base64').toString())
   return token && header && header.alg === algorithm
 }
 
-function hasEmail (token: { data: { email: string } }, email: string | RegExp) {
+function hasEmail(token: { data: { email: string } }, email: string | RegExp) {
   return token?.data?.email?.match(email)
 }
 
@@ -170,7 +190,7 @@ export const databaseRelatedChallenges = () => (req: Request, res: Response, nex
   next()
 }
 
-function changeProductChallenge (osaft: Product) {
+function changeProductChallenge(osaft: Product) {
   let urlForProductTamperingChallenge: string | null = null
   void osaft.reload().then(() => {
     for (const product of config.get<ProductConfig[]>('products')) {
@@ -189,7 +209,7 @@ function changeProductChallenge (osaft: Product) {
   })
 }
 
-function feedbackChallenge () {
+function feedbackChallenge() {
   FeedbackModel.findAndCountAll({ where: { rating: 5 } }).then(({ count }: { count: number }) => {
     if (count === 0) {
       challengeUtils.solve(challenges.feedbackChallenge)
@@ -199,7 +219,7 @@ function feedbackChallenge () {
   })
 }
 
-function knownVulnerableComponentChallenge () {
+function knownVulnerableComponentChallenge() {
   FeedbackModel.findAndCountAll({
     where: {
       comment: {
@@ -228,7 +248,7 @@ function knownVulnerableComponentChallenge () {
   })
 }
 
-function knownVulnerableComponents () {
+function knownVulnerableComponents() {
   return [
     {
       [Op.and]: [
@@ -245,7 +265,7 @@ function knownVulnerableComponents () {
   ]
 }
 
-function weirdCryptoChallenge () {
+function weirdCryptoChallenge() {
   FeedbackModel.findAndCountAll({
     where: {
       comment: {
@@ -274,7 +294,7 @@ function weirdCryptoChallenge () {
   })
 }
 
-function weirdCryptos () {
+function weirdCryptos() {
   return [
     { [Op.like]: '%z85%' },
     { [Op.like]: '%base85%' },
@@ -284,7 +304,7 @@ function weirdCryptos () {
   ]
 }
 
-function typosquattingNpmChallenge () {
+function typosquattingNpmChallenge() {
   FeedbackModel.findAndCountAll({ where: { comment: { [Op.like]: '%epilogue-js%' } } }
   ).then(({ count }: { count: number }) => {
     if (count > 0) {
@@ -303,7 +323,7 @@ function typosquattingNpmChallenge () {
   })
 }
 
-function typosquattingAngularChallenge () {
+function typosquattingAngularChallenge() {
   FeedbackModel.findAndCountAll({ where: { comment: { [Op.like]: '%ngy-cookie%' } } }
   ).then(({ count }: { count: number }) => {
     if (count > 0) {
@@ -322,7 +342,7 @@ function typosquattingAngularChallenge () {
   })
 }
 
-function hiddenImageChallenge () {
+function hiddenImageChallenge() {
   FeedbackModel.findAndCountAll({ where: { comment: { [Op.like]: '%pickle rick%' } } }
   ).then(({ count }: { count: number }) => {
     if (count > 0) {
@@ -341,7 +361,7 @@ function hiddenImageChallenge () {
   })
 }
 
-function supplyChainAttackChallenge () {
+function supplyChainAttackChallenge() {
   FeedbackModel.findAndCountAll({ where: { comment: { [Op.or]: eslintScopeVulnIds() } } }
   ).then(({ count }: { count: number }) => {
     if (count > 0) {
@@ -360,14 +380,14 @@ function supplyChainAttackChallenge () {
   })
 }
 
-function eslintScopeVulnIds () {
+function eslintScopeVulnIds() {
   return [
     { [Op.like]: '%eslint-scope/issues/39%' },
     { [Op.like]: '%npm:eslint-scope:20180712%' }
   ]
 }
 
-function dlpPastebinDataLeakChallenge () {
+function dlpPastebinDataLeakChallenge() {
   FeedbackModel.findAndCountAll({
     where: {
       comment: { [Op.and]: dangerousIngredients() }
@@ -392,7 +412,7 @@ function dlpPastebinDataLeakChallenge () {
   })
 }
 
-function csafChallenge () {
+function csafChallenge() {
   FeedbackModel.findAndCountAll({ where: { comment: { [Op.like]: '%' + config.get<string>('challenges.csafHashValue') + '%' } } }
   ).then(({ count }: { count: number }) => {
     if (count > 0) {
@@ -411,7 +431,7 @@ function csafChallenge () {
   })
 }
 
-function leakedApiKeyChallenge () {
+function leakedApiKeyChallenge() {
   FeedbackModel.findAndCountAll({ where: { comment: { [Op.like]: '%6PPi37DBxP4lDwlriuaxP15HaDJpsUXY5TspVmie%' } } }
   ).then(({ count }: { count: number }) => {
     if (count > 0) {
@@ -430,7 +450,7 @@ function leakedApiKeyChallenge () {
   })
 }
 
-function dangerousIngredients () {
+function dangerousIngredients() {
   return config.get<ProductConfig[]>('products')
     .flatMap((product) => product.keywordsForPastebinDataLeakChallenge)
     .filter(Boolean)
