@@ -14,7 +14,7 @@ Participants must exploit a file upload vulnerability to access sensitive system
 ## Implementation Highlights
 - **Vulnerable Extraction**: The ZIP extraction logic in `routes/fileUpload.ts` has been modified to robustly handle (and incorrectly trust) symbolic links using the Central Directory metadata.
 - **Challenge Verification**: A new verification middleware in `routes/verify.ts` monitors access to the uploaded symlinks and marks the challenge as solved when `users.yml` is successfully exposed.
-- **Payload Automation**: A Python script is provided to generate "100% correct" symlink payloads.
+- **Payload Automation**: A Python script is provided to generate symlink payloads.
 
 ## How to Run
 1. Navigate to the `JUICE-SHOP` directory: `cd JUICE-SHOP`
@@ -29,12 +29,13 @@ Participants must exploit a file upload vulnerability to access sensitive system
    python3 create_exploit.py
    ```
 2. **Upload the Exploit**:
+   - Login via any Juice Shop account.
    - Go to the **Complaint** form in Juice Shop.
    - Fill in the required fields and upload the generated `exploit.zip`.
-3. **Verify Access**:
+4. **Verify Access**:
    - Navigate to `http://localhost:3000/complaints/exploit.md`.
    - The content of `users.yml` should be displayed.
-4. **Solve Status**:
+5. **Solve Status**:
    - Check the **Score Board** to confirm the "Symlink Attack" challenge is marked as solved.
 
 ---
